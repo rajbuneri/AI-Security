@@ -1,0 +1,1540 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Shield, 
+  Terminal, 
+  Search, 
+  FileText, 
+  Activity, 
+  Cpu, 
+  AlertTriangle, 
+  CheckCircle, 
+  Layers, 
+  Play, 
+  X, 
+  Send, 
+  RefreshCw, 
+  Lock, 
+  Database, 
+  ExternalLink,
+  BookOpen,
+  Wifi,
+  Radio,
+  FileCode,
+  Sliders,
+  ChevronRight,
+  Info
+} from 'lucide-react';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Cell
+} from 'recharts';
+
+
+// Mock Templates for Security Logs to Analyze
+const MOCK_LOGS = {
+  ssh_brute: `Jun 21 16:42:10 soc-prod-srv sshd[29481]: Failed password for root from 185.220.101.5 port 49152 ssh2
+Jun 21 16:42:12 soc-prod-srv sshd[29481]: Failed password for root from 185.220.101.5 port 49158 ssh2
+Jun 21 16:42:15 soc-prod-srv sshd[29481]: Failed password for root from 185.220.101.5 port 49164 ssh2
+Jun 21 16:42:17 soc-prod-srv sshd[29481]: Failed password for admin from 185.220.101.5 port 49170 ssh2
+Jun 21 16:42:20 soc-prod-srv sshd[29481]: Accepted password for root from 185.220.101.5 port 49182 ssh2
+Jun 21 16:43:01 soc-prod-srv systemd-logind[912]: New session 482 of user root.`,
+  
+  sql_injection: `192.168.1.145 - - [21/Jun/2026:14:10:05 +0000] "GET /product.php?id=1%20UNION%20SELECT%20null,username,password%20FROM%20users HTTP/1.1" 200 4502 "http://vulnerable-shop.io/products" "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+192.168.1.145 - - [21/Jun/2026:14:10:12 +0000] "GET /product.php?id=1%20AND%201=1 HTTP/1.1" 200 1245 "http://vulnerable-shop.io/products" "Mozilla/5.0"
+192.168.1.145 - - [21/Jun/2026:14:11:32 +0000] "POST /login.php HTTP/1.1" 500 240 "http://vulnerable-shop.io/login" "sqlmap/1.4.12#stable (http://sqlmap.org)"`,
+
+  ransomware: `2026-06-21 15:02:11 | Process: svchost.exe (PID: 8842) initiated mass file renaming in C:\\Users\\j.doe\\Documents
+2026-06-21 15:02:12 | Renamed: financial_q1.xlsx -> financial_q1.xlsx.locked
+2026-06-21 15:02:13 | Renamed: customer_db.csv -> customer_db.csv.locked
+2026-06-21 15:02:14 | File created: DECRYPT_INSTRUCTIONS.txt in C:\\Users\\j.doe\\Documents
+2026-06-21 15:02:15 | Registry modified: HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Decryptor = "C:\\Users\\j.doe\\Documents\\DECRYPT_INSTRUCTIONS.txt"`,
+
+  exfiltration: `2026-06-21 15:10:00 | SRC: 10.100.4.12 (Internal Workstation) | DST: 91.240.118.12 (Known malicious staging site) | PROTOCOL: HTTPS (443)
+2026-06-21 15:10:30 | Packet size spikes detected: outbound payload size 4.2 GB
+2026-06-21 15:12:15 | DNS query for staging.exfil-domain.ru resolved to 91.240.118.12
+2026-06-21 15:15:00 | Process: powershell.exe triggered outbound socket creation to 91.240.118.12`
+};
+
+const STATS_HISTORY_MOCK = [
+  { time: '12:00', attacks: 45, bandwidth: 22, cpu: 14 },
+  { time: '13:00', attacks: 88, bandwidth: 40, cpu: 28 },
+  { time: '14:00', attacks: 152, bandwidth: 95, cpu: 45 },
+  { time: '15:00', attacks: 210, bandwidth: 120, cpu: 62 },
+  { time: '16:00', attacks: 130, bandwidth: 68, cpu: 31 },
+  { time: '17:00', attacks: 70, bandwidth: 35, cpu: 18 }
+];
+
+const RECENT_ALERTS_MOCK = [
+  { id: 'ALT-402', source: '185.220.101.5', target: 'SOC-PROD-SRV', type: 'SSH Brute Force', severity: 'High', timestamp: '16:42:20', status: 'Pending' },
+  { id: 'ALT-403', source: '192.168.1.145', target: 'DB-WEB-APP', type: 'SQL Injection Probe', severity: 'Medium', timestamp: '14:11:32', status: 'Investigating' },
+  { id: 'ALT-404', source: '10.100.4.12', target: 'External WAN', type: 'Potential Data Exfiltration', severity: 'Critical', timestamp: '15:15:00', status: 'Blocked' }
+];
+
+// Solves rendering complex AI outputs neatly in terminal aesthetic without external markdown libraries.
+const SecurityReportViewer = ({ text }) => {
+  if (!text) return null;
+
+  const lines = text.split('\n');
+  return (
+    <div className="font-mono text-sm leading-relaxed space-y-3 text-slate-300">
+      {lines.map((line, idx) => {
+        // Headers
+        if (line.startsWith('### ')) {
+          return <h4 key={idx} className="text-cyan-400 font-bold border-b border-cyan-950/50 pb-1 mt-4 flex items-center gap-2">
+            <ChevronRight className="w-4 h-4 text-cyan-500 animate-pulse" />
+            {line.replace('### ', '')}
+          </h4>;
+        }
+        if (line.startsWith('## ')) {
+          return <h3 key={idx} className="text-emerald-400 font-extrabold border-b border-emerald-900/50 pb-2 mt-5 text-base flex items-center gap-2">
+            <Layers className="w-4 h-4 text-emerald-500" />
+            {line.replace('## ', '')}
+          </h3>;
+        }
+        if (line.startsWith('# ')) {
+          return <h2 key={idx} className="text-lg text-rose-400 font-black tracking-wide border-b border-rose-950/80 pb-2 mb-4 uppercase">
+            {line.replace('# ', '')}
+          </h2>;
+        }
+        
+        // Bullet list points
+        if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+          const content = line.replace(/^[\s]*[-*]\s+/, '');
+          return <div key={idx} className="flex items-start gap-2 pl-4 text-slate-200">
+            <span className="text-cyan-500 mt-1.5">•</span>
+            <span>{parseInlineStyles(content)}</span>
+          </div>;
+        }
+
+        // Ordered lists
+        const orderedListMatch = line.match(/^\s*(\d+)\.\s+(.*)/);
+        if (orderedListMatch) {
+          return <div key={idx} className="flex items-start gap-2 pl-4 text-slate-200">
+            <span className="text-amber-500 font-bold mt-0.5">{orderedListMatch[1]}.</span>
+            <span>{parseInlineStyles(orderedListMatch[2])}</span>
+          </div>;
+        }
+
+        // Horizontal Rule
+        if (line.trim() === '---') {
+          return <hr key={idx} className="border-slate-800 my-4" />;
+        }
+
+        // Code block (Simple inline/fenced code detector)
+        if (line.trim().startsWith('```')) {
+          return null; // Skip markdown fence tokens to keep aesthetic high
+        }
+
+        // Default paragraph
+        return <p key={idx} className="text-slate-300">{parseInlineStyles(line)}</p>;
+      })}
+    </div>
+  );
+};
+
+// Help parse bold (**), inline code (`), and badges inside paragraphs
+function parseInlineStyles(inputText) {
+  let text = inputText;
+  const elements = [];
+  let keyIdx = 0;
+
+  // Pattern scanner
+  const regex = /(\*\*.*?\*\*|`.*?`)/g;
+  const parts = text.split(regex);
+
+  if (parts.length === 1) return text;
+
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      const pureText = part.slice(2, -2);
+      // Give key indicators (e.g. Severity, Recommendation) unique coloring
+      const isCriticalWord = ['CRITICAL', 'HIGH', 'WARNING', 'MITIGATION', 'RECOMMENDED'].some(w => pureText.toUpperCase().includes(w));
+      return (
+        <strong key={index} className={isCriticalWord ? "text-rose-400 font-semibold" : "text-emerald-300 font-semibold"}>
+          {pureText}
+        </strong>
+      );
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code key={index} className="bg-slate-900 border border-slate-700/60 px-1.5 py-0.5 rounded text-amber-400 text-xs mx-0.5">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+}
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [logInput, setLogInput] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState('');
+  const [severityScore, setSeverityScore] = useState(null);
+
+  // Gemini API key storage
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('cyber_soc_gemini_key') || '');
+  const [isKeySaved, setIsKeySaved] = useState(!!localStorage.getItem('cyber_soc_gemini_key'));
+
+  // Threat Intelligence parameters
+  const [intelQuery, setIntelQuery] = useState('CVE-2024-21626'); // Example Runc breakout
+  const [intelSearching, setIntelSearching] = useState(false);
+  const [intelResult, setIntelResult] = useState('');
+  const [intelSources, setIntelSources] = useState([]);
+
+  // Vulnerability Scanner state
+  const [scanTarget, setScanTarget] = useState('192.168.10.45');
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanOutput, setScanOutput] = useState([]);
+  const [detectedVulnerabilities, setDetectedVulnerabilities] = useState([]);
+  const scanTerminalEndRef = useRef(null);
+
+  // Custom IR Playbook fields
+  const [threatType, setThreatType] = useState('ransomware');
+  const [complianceFramework, setComplianceFramework] = useState('nist');
+  const [generatingPlaybook, setGeneratingPlaybook] = useState(false);
+  const [generatedPlaybook, setGeneratedPlaybook] = useState('');
+
+  // AI Assistant Chat state
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState([
+    { role: 'assistant', text: 'SecOps Command Co-Pilot Online. I have deep context on system logs, modern network vulnerabilities, and incident response playbooks. How can I assist with your defense strategy today?' }
+  ]);
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const chatEndRef = useRef(null);
+
+  // Sync scroll for interactive tools
+  useEffect(() => {
+    if (scanTerminalEndRef.current) {
+      scanTerminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [scanOutput]);
+
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, assistantLoading]);
+
+  // Handle local storage of user-provided API key
+  const handleSaveKey = () => {
+    localStorage.setItem('cyber_soc_gemini_key', apiKey);
+    setIsKeySaved(true);
+  };
+
+  const handleClearKey = () => {
+    localStorage.removeItem('cyber_soc_gemini_key');
+    setApiKey('');
+    setIsKeySaved(false);
+  };
+
+  const runGeminiCall = async (prompt, systemInstruction = '', useSearch = false) => {
+    const activeKey = apiKey || ''; // Empty string lets the canvas environment supply key natively
+    const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${useSearch ? 'gemini-3-flash-preview' : 'gemini-3-flash-preview'}:generateContent?key=${activeKey}`;
+
+    const payload = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.1, // High reliability, low creative variance
+      }
+    };
+
+    if (systemInstruction) {
+      payload.systemInstruction = {
+        parts: [{ text: systemInstruction }]
+      };
+    }
+
+    if (useSearch) {
+      payload.tools = [{ "google_search": {} }];
+    }
+
+    let retries = 3;
+    let delay = 1000;
+
+    while (retries > 0) {
+      try {
+        const response = await fetch(baseUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData?.error?.message || `HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const candidate = result.candidates?.[0];
+        
+        if (candidate && candidate.content?.parts?.[0]?.text) {
+          const generatedText = candidate.content.parts[0].text;
+          let sources = [];
+          
+          if (useSearch && candidate.groundingMetadata?.groundingAttributions) {
+            sources = candidate.groundingMetadata.groundingAttributions
+              .map(attr => ({
+                uri: attr.web?.uri,
+                title: attr.web?.title,
+              }))
+              .filter(source => source.uri && source.title);
+          }
+          return { text: generatedText, sources };
+        }
+        throw new Error("Malformed API response");
+      } catch (err) {
+        retries--;
+        if (retries === 0) {
+          throw err;
+        }
+        await new Promise(res => setTimeout(res, delay));
+        delay *= 2; // Exponential backoff
+      }
+    }
+  };
+
+  const handleLogAnalysis = async () => {
+    if (!logInput.trim()) return;
+    setAnalyzing(true);
+    setAnalysisResult('');
+    setSeverityScore(null);
+
+    const systemPrompt = `You are an elite L3 Cyber Security Incident Handler. 
+Analyze the provided log carefully. Identify:
+1. Threat Class (e.g. SQL Injection, Brute Force, Malware communication)
+2. Attack Origin IP / target resources
+3. Critical Timeline of threat events
+4. Threat Severity Score (1-10 scale)
+5. Practical, urgent mitigation checklist.
+
+Keep your response extremely professional, technical, clear, and perfectly structured with headings (use '##' and '###' cleanly). Ensure the first line is exactly in the format: "SEVERITY SCORE: [number] / 10" followed by a detailed analysis.`;
+
+    try {
+      const response = await runGeminiCall(logInput, systemPrompt);
+      setAnalysisResult(response.text);
+
+      // Extract severity score
+      const match = response.text.match(/SEVERITY SCORE:\s*(\d+)/i);
+      if (match && match[1]) {
+        setSeverityScore(parseInt(match[1]));
+      } else {
+        // Fallback guess based on content keywords
+        const lower = response.text.toLowerCase();
+        if (lower.includes('critical') || lower.includes('ransomware')) setSeverityScore(9);
+        else if (lower.includes('brute force') || lower.includes('injection')) setSeverityScore(7);
+        else setSeverityScore(4);
+      }
+    } catch (error) {
+      setAnalysisResult(`[ERROR] Cyber analysis process interrupted: ${error.message}. Please double check your Gemini connection.`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const loadLogTemplate = (key) => {
+    setLogInput(MOCK_LOGS[key] || '');
+  };
+
+  const handleThreatIntelSearch = async () => {
+    if (!intelQuery.trim()) return;
+    setIntelSearching(true);
+    setIntelResult('');
+    setIntelSources([]);
+
+    const systemPrompt = `You are a Threat Intelligence Analyst specializing in CVE profiling and cyber adversary TTPs (Tactics, Techniques, and Procedures).
+Using web grounding, research the requested threat/vulnerability. Summarize:
+1. CVSS v3 Severity & Affected Software versions
+2. Root Cause of exploit/vulnerability (e.g., race condition, buffer overflow, injection)
+3. Signature Indicator of Compromise (IoC) details (known malicious file hashes, suspicious domains, common registry changes)
+4. Official patching or mitigation links.
+
+Provide verifiable external links if possible. Keep it technical but readable.`;
+
+    try {
+      const response = await runGeminiCall(intelQuery, systemPrompt, true);
+      setIntelResult(response.text);
+      setIntelSources(response.sources || []);
+    } catch (error) {
+      setIntelResult(`[INTEL ERROR] Failed to perform deep-grounded search: ${error.message}`);
+    } finally {
+      setIntelSearching(false);
+    }
+  };
+
+  const startNetworkScan = () => {
+    if (!scanTarget.trim() || isScanning) return;
+    setIsScanning(true);
+    setScanOutput([]);
+    setDetectedVulnerabilities([]);
+
+    const logs = [
+      `[+] Initializing Security Recon on target: ${scanTarget}`,
+      `[+] Pinging host ${scanTarget}... Host is alive. Latency = 14ms`,
+      `[+] Querying TCP Ports: 1-1024, 8080, 8443`,
+      `[i] Port 22/tcp [SSH] - OPEN - OpenSSH 8.2p1 (Vulnerable context checked)`,
+      `[i] Port 80/tcp [HTTP] - OPEN - Apache httpd 2.4.41`,
+      `[i] Port 443/tcp [HTTPS] - OPEN - Apache httpd 2.4.41 (TLS 1.3 Active)`,
+      `[i] Port 3306/tcp [MySQL] - FILTERED`,
+      `[i] Port 8080/tcp [HTTP-Proxy] - OPEN - Tomcat/9.0.37`,
+      `[+] Running active security script suite on port 22 & 8080...`,
+      `[!] Alert: Weak cipher match found on Port 22 SSH. Key exchange algorithm diffie-hellman-group1-sha1 allowed.`,
+      `[!] Alert: Apache HTTP Server contains obsolete modules. Potential directory traversal bypass.`,
+      `[!] Alert: Tomcat 8080 discloses standard administrative endpoint configuration.`,
+      `[+] Security footprint completed. Threat indicators categorized.`
+    ];
+
+    const foundVulns = [
+      { id: 'VULN-01', port: '22/tcp', name: 'Legacy SSH Cipher Allowed', severity: 'Medium', details: 'diffie-hellman-group1-sha1 is active, risking potential machine-in-the-middle decryption.' },
+      { id: 'VULN-02', port: '8080/tcp', name: 'Apache Tomcat Administrative Console Exposed', severity: 'High', details: 'Root login parameters exposed to network probes on port 8080.' },
+      { id: 'VULN-03', port: '80/tcp', name: 'Apache httpd Outdated Subversion (2.4.41)', severity: 'Low', details: 'Version contains minor Denial-of-Service and remote boundary check vulnerabilities.' }
+    ];
+
+    let currentLogIndex = 0;
+    const interval = setInterval(() => {
+      if (currentLogIndex < logs.length) {
+        setScanOutput(prev => [...prev, logs[currentLogIndex]]);
+        currentLogIndex++;
+      } else {
+        clearInterval(interval);
+        setIsScanning(false);
+        setDetectedVulnerabilities(foundVulns);
+      }
+    }, 450);
+  };
+
+  // Pre-load a target to AI analysis tab
+  const handleAnalyzeScanResult = (vuln) => {
+    const formattedLog = `Target host: ${scanTarget}
+Detected Vulnerability: ${vuln.name}
+Port: ${vuln.port}
+Severity: ${vuln.severity}
+Scanner Context Details: ${vuln.details}
+Generate standard mitigation code, firewall blocks, or network configuration settings to patch this vulnerability immediately.`;
+    setLogInput(formattedLog);
+    setActiveTab('logs');
+  };
+
+  const handlePlaybookGeneration = async () => {
+    setGeneratingPlaybook(true);
+    setGeneratedPlaybook('');
+
+    const prompt = `Develop a highly precise Security Incident Response (IR) Playbook for dealing with a ${threatType.toUpperCase()} incident inside our infrastructure.
+Integrate alignment details adhering directly to the ${complianceFramework.toUpperCase()} cyber security framework standards.
+
+Include the following sections clearly formatted in Markdown:
+1. ## Phase 1: Identification & Escalation Triage (How to confirm the vector)
+2. ## Phase 2: Containment Measures (Both short-term quick isolation and long-term security configuration actions)
+3. ## Phase 3: Eradication Steps (Root cause cleaning)
+4. ## Phase 4: Recovery & Hardening Validation
+5. ## Phase 5: Post-Incident Lessons Learned Questions & Compliance Documentation requirements.
+
+Ensure it reads like an operational blueprint used by a multi-national security team.`;
+
+    try {
+      const response = await runGeminiCall(prompt, "You are a cyber security auditor, compliance specialist, and expert incident commander.");
+      setGeneratedPlaybook(response.text);
+    } catch (error) {
+      setGeneratedPlaybook(`[PLAYBOOK ERROR] Configuration compilation failed: ${error.message}`);
+    } finally {
+      setGeneratingPlaybook(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!chatInput.trim()) return;
+    const userMsg = { role: 'user', text: chatInput };
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatInput('');
+    setAssistantLoading(true);
+
+    const systemPrompt = `You are a certified L3 Cyber Security Specialist (holder of CISSP, OSCP, and GCIH certifications) acting as a Security Operations co-pilot.
+Your tone is technically proficient, direct, and security-hardened. 
+Give actionable, safe, highly relevant advice regarding security code blocks, security operations, secure cloud configurations, and defense blueprints.
+Never propose illegal acts or destructive exploit tools; focus purely on cyber defense, remediation, threat modeling, and posture improvement.`;
+
+    try {
+      const response = await runGeminiCall(userMsg.text, systemPrompt);
+      setChatMessages(prev => [...prev, { role: 'assistant', text: response.text }]);
+    } catch (error) {
+      setChatMessages(prev => [...prev, { role: 'assistant', text: `[COMMUNICATION BLOCKED] Assistant failed to parse logic stream: ${error.message}` }]);
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#090b10] text-slate-100 flex flex-col font-sans select-none selection:bg-cyan-500 selection:text-black">
+      
+      {/* Top Threat Indicator Banner & Global Stats Header */}
+      <header className="bg-[#0e111a] border-b border-slate-800/80 px-4 py-3 sticky top-0 z-50 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gradient-to-br from-cyan-900/40 to-blue-950/30 border border-cyan-500/30 rounded-lg shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+            <Shield className="w-6 h-6 text-cyan-400 animate-pulse" />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold tracking-wider uppercase text-slate-200">Aegis SecOps</h1>
+            <p className="text-xs text-cyan-400/80 font-mono">Cyber Security Analyst Command Center v2.6</p>
+          </div>
+        </div>
+
+        {/* Live Network Health Status widgets */}
+        <div className="flex items-center gap-6 text-xs font-mono">
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-slate-900/60 rounded-full border border-slate-800">
+            <Radio className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+            <span className="text-slate-400">System State:</span>
+            <span className="text-emerald-400 font-bold">SHIELD ARMED</span>
+          </div>
+          <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-900/60 rounded-full border border-slate-800">
+            <Activity className="w-3.5 h-3.5 text-cyan-500 animate-spin" />
+            <span className="text-slate-400">SOC Integrity:</span>
+            <span className="text-cyan-400 font-bold">98.6%</span>
+          </div>
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-900/60 rounded-full border border-slate-800">
+            <Wifi className="w-3.5 h-3.5 text-purple-400" />
+            <span className="text-slate-400">Active Honeypots:</span>
+            <span className="text-purple-400 font-bold">14 Online</span>
+          </div>
+        </div>
+
+        {/* API Key Modal & Overlay in-app indicator */}
+        <div className="flex items-center gap-2">
+          {isKeySaved ? (
+            <div className="flex items-center gap-2 bg-emerald-950/30 border border-emerald-900/60 py-1 px-2.5 rounded-md text-xs text-emerald-400">
+              <Lock className="w-3.5 h-3.5" />
+              <span>SOC Co-Pilot Key Connected</span>
+              <button 
+                onClick={handleClearKey} 
+                className="hover:text-rose-400 transition ml-2 font-bold cursor-pointer" 
+                title="Disconnect Key"
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-amber-950/20 border border-amber-900/50 py-1 px-2.5 rounded-md text-xs text-amber-400">
+              <Lock className="w-3.5 h-3.5 text-amber-500" />
+              <input
+                type="password"
+                placeholder="Paste Gemini Key (Optional)"
+                className="bg-transparent border-none text-xs focus:ring-0 w-36 text-amber-200 placeholder-amber-700 font-mono"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+              <button
+                onClick={handleSaveKey}
+                className="bg-amber-600 hover:bg-amber-500 text-slate-950 px-2 py-0.5 rounded font-bold cursor-pointer transition text-2xs"
+              >
+                Save
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Main Grid Workspace Area */}
+      <div className="flex flex-1 overflow-hidden">
+        
+        {/* Navigation Sidebar Panel */}
+        <aside className="w-64 bg-[#0c0e15] border-r border-slate-900 p-4 flex flex-col justify-between hidden md:flex shrink-0">
+          <div className="space-y-6">
+            <div className="text-2xs font-bold tracking-widest text-slate-500 uppercase px-2">Operational Command</div>
+            
+            <nav className="space-y-1">
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all font-medium ${
+                  activeTab === 'dashboard' 
+                    ? 'bg-gradient-to-r from-cyan-950/40 to-blue-950/20 text-cyan-400 border-l-2 border-cyan-500' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                }`}
+              >
+                <Layers className="w-4 h-4" />
+                <span>Dashboard Overview</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('logs')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all font-medium ${
+                  activeTab === 'logs' 
+                    ? 'bg-gradient-to-r from-cyan-950/40 to-blue-950/20 text-cyan-400 border-l-2 border-cyan-500' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                }`}
+              >
+                <Terminal className="w-4 h-4" />
+                <span>Log Analyzer AI</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('threat-intel')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all font-medium ${
+                  activeTab === 'threat-intel' 
+                    ? 'bg-gradient-to-r from-cyan-950/40 to-blue-950/20 text-cyan-400 border-l-2 border-cyan-500' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                }`}
+              >
+                <Search className="w-4 h-4" />
+                <span>Threat Intelligence</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('playbook')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all font-medium ${
+                  activeTab === 'playbook' 
+                    ? 'bg-gradient-to-r from-cyan-950/40 to-blue-950/20 text-cyan-400 border-l-2 border-cyan-500' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                <span>Playbook Generator</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('scanner')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all font-medium ${
+                  activeTab === 'scanner' 
+                    ? 'bg-gradient-to-r from-cyan-950/40 to-blue-950/20 text-cyan-400 border-l-2 border-cyan-500' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                }`}
+              >
+                <Cpu className="w-4 h-4" />
+                <span>Vulnerability Scanner</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all font-medium ${
+                  activeTab === 'chat' 
+                    ? 'bg-gradient-to-r from-cyan-950/40 to-blue-950/20 text-cyan-400 border-l-2 border-cyan-500' 
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                }`}
+              >
+                <Database className="w-4 h-4" />
+                <span>SecOps L3 Assistant</span>
+              </button>
+            </nav>
+          </div>
+
+          {/* Secure Environment Notice info */}
+          <div className="bg-[#121520] border border-slate-900 p-3 rounded-lg text-2xs space-y-2">
+            <div className="flex items-center gap-1.5 text-amber-500 font-semibold uppercase">
+              <Info className="w-3.5 h-3.5" />
+              <span>Local Execution</span>
+            </div>
+            <p className="text-slate-500 font-mono leading-normal">
+              Queries parsed directly through Google Gemini API. Set up proxy or keys for production enterprise nodes.
+            </p>
+          </div>
+        </aside>
+
+        {/* Mobile Navigation Tickers */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0c0e15] border-t border-slate-800 p-2 flex items-center justify-around z-50 text-slate-400">
+          <button onClick={() => setActiveTab('dashboard')} className={`p-2 flex flex-col items-center ${activeTab === 'dashboard' ? 'text-cyan-400' : ''}`}>
+            <Layers className="w-5 h-5" />
+            <span className="text-2xs mt-1">Dashboard</span>
+          </button>
+          <button onClick={() => setActiveTab('logs')} className={`p-2 flex flex-col items-center ${activeTab === 'logs' ? 'text-cyan-400' : ''}`}>
+            <Terminal className="w-5 h-5" />
+            <span className="text-2xs mt-1">Logs</span>
+          </button>
+          <button onClick={() => setActiveTab('threat-intel')} className={`p-2 flex flex-col items-center ${activeTab === 'threat-intel' ? 'text-cyan-400' : ''}`}>
+            <Search className="w-5 h-5" />
+            <span className="text-2xs mt-1">Intel</span>
+          </button>
+          <button onClick={() => setActiveTab('playbook')} className={`p-2 flex flex-col items-center ${activeTab === 'playbook' ? 'text-cyan-400' : ''}`}>
+            <FileText className="w-5 h-5" />
+            <span className="text-2xs mt-1">Playbooks</span>
+          </button>
+          <button onClick={() => setActiveTab('scanner')} className={`p-2 flex flex-col items-center ${activeTab === 'scanner' ? 'text-cyan-400' : ''}`}>
+            <Cpu className="w-5 h-5" />
+            <span className="text-2xs mt-1">Scanner</span>
+          </button>
+          <button onClick={() => setActiveTab('chat')} className={`p-2 flex flex-col items-center ${activeTab === 'chat' ? 'text-cyan-400' : ''}`}>
+            <Database className="w-5 h-5" />
+            <span className="text-2xs mt-1">Chat</span>
+          </button>
+        </div>
+
+        {/* Main Interface Stage */}
+        <main className="flex-1 overflow-y-auto pb-20 md:pb-6 p-4 md:p-6 bg-[#090b10] flex flex-col gap-6">
+
+          {/* TAB 1: SOC DASHBOARD OVERVIEW */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6 animate-fadeIn">
+              
+              {/* Stat Indicator Metrics Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <div className="bg-[#0e121a] border border-slate-800/80 p-4 rounded-xl flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-2xs font-mono font-bold uppercase tracking-wider text-slate-500">Telemetry Attacks Blocked</p>
+                    <p className="text-2xl font-bold text-slate-100 font-mono">1,429</p>
+                    <p className="text-2xs text-emerald-400 flex items-center gap-1 font-mono">
+                      <span>↑ 12.3%</span> <span className="text-slate-600">from yesterday</span>
+                    </p>
+                  </div>
+                  <div className="p-3 bg-emerald-950/20 border border-emerald-900/50 rounded-lg text-emerald-400">
+                    <CheckCircle className="w-6 h-6" />
+                  </div>
+                </div>
+
+                <div className="bg-[#0e121a] border border-slate-800/80 p-4 rounded-xl flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-2xs font-mono font-bold uppercase tracking-wider text-slate-500">Ingested Log Packets</p>
+                    <p className="text-2xl font-bold text-slate-100 font-mono">142,884</p>
+                    <p className="text-2xs text-cyan-400 flex items-center gap-1 font-mono">
+                      <span>Live Feed Running</span>
+                    </p>
+                  </div>
+                  <div className="p-3 bg-cyan-950/20 border border-cyan-900/50 rounded-lg text-cyan-400">
+                    <Activity className="w-6 h-6" />
+                  </div>
+                </div>
+
+                <div className="bg-[#0e121a] border border-slate-800/80 p-4 rounded-xl flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-2xs font-mono font-bold uppercase tracking-wider text-slate-500">Unresolved High Alerts</p>
+                    <p className="text-2xl font-bold text-amber-500 font-mono">3</p>
+                    <p className="text-2xs text-rose-400 flex items-center gap-1 font-mono">
+                      <span>Action required in logs</span>
+                    </p>
+                  </div>
+                  <div className="p-3 bg-amber-950/20 border border-amber-900/50 rounded-lg text-amber-500">
+                    <AlertTriangle className="w-6 h-6" />
+                  </div>
+                </div>
+
+                <div className="bg-[#0e121a] border border-slate-800/80 p-4 rounded-xl flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-2xs font-mono font-bold uppercase tracking-wider text-slate-500">Network Firewalls</p>
+                    <p className="text-2xl font-bold text-purple-400 font-mono">98.9%</p>
+                    <p className="text-2xs text-purple-300 flex items-center gap-1 font-mono">
+                      <span>DDoS Shields Active</span>
+                    </p>
+                  </div>
+                  <div className="p-3 bg-purple-950/20 border border-purple-900/50 rounded-lg text-purple-400">
+                    <Shield className="w-6 h-6" />
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Chart Telemetry Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Simulated Threats Ingress Chart */}
+                <div className="bg-[#0e121a] border border-slate-800/80 p-4 rounded-xl lg:col-span-2 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold tracking-wide text-slate-200">Ingressed Threat Vector Telemetry</h3>
+                      <p className="text-xs text-slate-500">Live hourly attack vector spike log tracker</p>
+                    </div>
+                    <span className="text-xs bg-[#161d2a] border border-slate-800/80 text-cyan-400 px-2 py-1 rounded font-mono">
+                      Feed Status: SYNCED
+                    </span>
+                  </div>
+
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={STATS_HISTORY_MOCK} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorAttacks" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#08b6d4" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#08b6d4" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#161b26" vertical={false} />
+                        <XAxis dataKey="time" stroke="#52525b" fontSize={11} tickLine={false} />
+                        <YAxis stroke="#52525b" fontSize={11} tickLine={false} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#0e121a', borderColor: '#1e293b', color: '#f1f5f9' }}
+                          labelStyle={{ color: '#08b6d4', fontWeight: 'bold' }}
+                        />
+                        <Area type="monotone" dataKey="attacks" stroke="#08b6d4" strokeWidth={2} fillOpacity={1} fill="url(#colorAttacks)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Simulated Incident categories widget */}
+                <div className="bg-[#0e121a] border border-slate-800/80 p-4 rounded-xl flex flex-col justify-between space-y-4">
+                  <div>
+                    <h3 className="text-sm font-bold tracking-wide text-slate-200">Incident Severity Breakdowns</h3>
+                    <p className="text-xs text-slate-500">Distribution ratio by vulnerability class</p>
+                  </div>
+
+                  <div className="space-y-3.5">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-mono">
+                        <span className="text-slate-400">Remote Exploits (RCE)</span>
+                        <span className="text-rose-400 font-bold">42%</span>
+                      </div>
+                      <div className="w-full bg-slate-900 rounded-full h-1.5">
+                        <div className="bg-rose-500 h-1.5 rounded-full" style={{ width: '42%' }}></div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-mono">
+                        <span className="text-slate-400">Privilege Escalation</span>
+                        <span className="text-amber-500 font-bold">28%</span>
+                      </div>
+                      <div className="w-full bg-slate-900 rounded-full h-1.5">
+                        <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: '28%' }}></div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-mono">
+                        <span className="text-slate-400">Database Injection (SQLi)</span>
+                        <span className="text-yellow-400 font-bold">18%</span>
+                      </div>
+                      <div className="w-full bg-slate-900 rounded-full h-1.5">
+                        <div className="bg-yellow-400 h-1.5 rounded-full" style={{ width: '18%' }}></div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-mono">
+                        <span className="text-slate-400">DDoS Flood Requests</span>
+                        <span className="text-purple-400 font-bold">12%</span>
+                      </div>
+                      <div className="w-full bg-slate-900 rounded-full h-1.5">
+                        <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: '12%' }}></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-[#111624] rounded-lg border border-slate-800/60 text-xs text-slate-400 flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Real-time heuristic rules are fully configured and listening on standard APIs.</span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Active Triages alert board table */}
+              <div className="bg-[#0e121a] border border-slate-800/80 rounded-xl overflow-hidden">
+                <div className="p-4 border-b border-slate-800/80 flex justify-between items-center flex-wrap gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold tracking-wide text-slate-200">Active SecOps Incidents Panel</h3>
+                    <p className="text-xs text-slate-500">Live security triage alerts requiring review</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      // Trigger a quick status update
+                      const event = new CustomEvent('toast', { detail: 'Refreshing network feeds...' });
+                      window.dispatchEvent(event);
+                    }} 
+                    className="flex items-center gap-1.5 text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-3 py-1.5 rounded-lg transition font-mono cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Refresh Stream</span>
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs font-mono">
+                    <thead>
+                      <tr className="bg-[#121622] text-slate-400 border-b border-slate-850">
+                        <th className="p-3">Alert ID</th>
+                        <th className="p-3">Threat Vector</th>
+                        <th className="p-3">Source Host</th>
+                        <th className="p-3">Target Asset</th>
+                        <th className="p-3">Severity</th>
+                        <th className="p-3">Time</th>
+                        <th className="p-3 text-right">Triage Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-900 text-slate-300">
+                      {RECENT_ALERTS_MOCK.map((alert, idx) => (
+                        <tr key={idx} className="hover:bg-slate-900/40 transition">
+                          <td className="p-3 font-semibold text-cyan-400">{alert.id}</td>
+                          <td className="p-3 text-slate-200">{alert.type}</td>
+                          <td className="p-3 text-slate-400">{alert.source}</td>
+                          <td className="p-3 text-slate-400">{alert.target}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              alert.severity === 'Critical' 
+                                ? 'bg-rose-950/40 text-rose-400 border border-rose-900/50' 
+                                : alert.severity === 'High' 
+                                ? 'bg-amber-950/40 text-amber-400 border border-amber-900/50' 
+                                : 'bg-blue-950/40 text-blue-400 border border-blue-900/50'
+                            }`}>
+                              {alert.severity}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-500">{alert.timestamp}</td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() => {
+                                // Dynamically trigger the logs tab with selected templates
+                                if (alert.type.includes('SSH')) loadLogTemplate('ssh_brute');
+                                else if (alert.type.includes('SQL')) loadLogTemplate('sql_injection');
+                                else if (alert.type.includes('Exfiltration')) loadLogTemplate('exfiltration');
+                                setActiveTab('logs');
+                              }}
+                              className="px-2 py-1 bg-cyan-950 text-cyan-400 border border-cyan-900/60 rounded text-[10px] hover:bg-cyan-900/60 hover:text-cyan-300 transition cursor-pointer"
+                            >
+                              Inspect Log
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 2: LOG ANALYZER AI */}
+          {activeTab === 'logs' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fadeIn">
+              
+              {/* Log Entry Panel (Left side) */}
+              <div className="lg:col-span-5 flex flex-col gap-4">
+                <div className="bg-[#0e121a] border border-slate-800/80 p-4 rounded-xl space-y-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-200">Incident Log Injector</h3>
+                    <p className="text-xs text-slate-500">Paste raw system, web, or terminal network logs</p>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs text-slate-400 font-mono">Load Incident Templates:</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={() => loadLogTemplate('ssh_brute')} 
+                        className="py-1 px-2.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 font-mono rounded text-left transition truncate cursor-pointer"
+                      >
+                        SSH Brute Force
+                      </button>
+                      <button 
+                        onClick={() => loadLogTemplate('sql_injection')} 
+                        className="py-1 px-2.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 font-mono rounded text-left transition truncate cursor-pointer"
+                      >
+                        SQL Injection Attack
+                      </button>
+                      <button 
+                        onClick={() => loadLogTemplate('ransomware')} 
+                        className="py-1 px-2.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 font-mono rounded text-left transition truncate cursor-pointer"
+                      >
+                        Ransomware Registry
+                      </button>
+                      <button 
+                        onClick={() => loadLogTemplate('exfiltration')} 
+                        className="py-1 px-2.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 font-mono rounded text-left transition truncate cursor-pointer"
+                      >
+                        Exfiltration PowerS
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea
+                    className="w-full h-80 bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs text-slate-300 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 resize-none leading-relaxed"
+                    placeholder="Jun 21 16:42:10 soc-prod-srv sshd[29481]: Failed password..."
+                    value={logInput}
+                    onChange={(e) => setLogInput(e.target.value)}
+                  />
+
+                  <button
+                    onClick={handleLogAnalysis}
+                    disabled={analyzing || !logInput.trim()}
+                    className={`w-full py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition flex items-center justify-center gap-2 cursor-pointer ${
+                      analyzing || !logInput.trim()
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-900'
+                        : 'bg-gradient-to-r from-cyan-600 to-blue-700 text-slate-950 hover:from-cyan-500 hover:to-blue-600 shadow-[0_0_15px_rgba(6,182,212,0.15)] font-black'
+                    }`}
+                  >
+                    {analyzing ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                        <span>AI Parsing Intelligence...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Terminal className="w-4 h-4 text-slate-950" />
+                        <span>Initiate Threat Analysis</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Analysis Assessment Results (Right side) */}
+              <div className="lg:col-span-7 flex flex-col">
+                <div className="bg-[#0e121a] border border-slate-800/80 p-5 rounded-xl flex flex-col flex-1 gap-4 min-h-[500px]">
+                  
+                  {/* Analysis Header with dynamic Gauge Badge */}
+                  <div className="border-b border-slate-850 pb-4 flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold tracking-wide text-slate-200">Incident Assessment Output</h3>
+                      <p className="text-xs text-slate-500">Autonomous co-pilot incident analysis</p>
+                    </div>
+
+                    {severityScore !== null && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xs text-slate-400 font-mono font-bold uppercase">Threat Score:</span>
+                        <span className={`px-3 py-1 rounded-full font-mono text-xs font-bold border ${
+                          severityScore >= 8 
+                            ? 'bg-rose-950/60 text-rose-400 border-rose-900' 
+                            : severityScore >= 5 
+                            ? 'bg-amber-950/60 text-amber-400 border-amber-900' 
+                            : 'bg-emerald-950/60 text-emerald-400 border-emerald-900'
+                        }`}>
+                          {severityScore} / 10
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Assessment Box */}
+                  <div className="flex-1 overflow-y-auto pr-1">
+                    {analyzing ? (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-3">
+                        <Cpu className="w-8 h-8 text-cyan-500 animate-spin" />
+                        <span className="text-xs font-mono animate-pulse">Running advanced heuristics and compliance audits...</span>
+                      </div>
+                    ) : analysisResult ? (
+                      <SecurityReportViewer text={analysisResult} />
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-2 border-2 border-dashed border-slate-900 rounded-lg p-8">
+                        <Activity className="w-8 h-8 text-slate-700" />
+                        <p className="text-xs font-mono text-center max-w-sm">
+                          Load a preconfigured template or inject custom raw logs. Secure sandbox AI will outline vulnerability maps and recovery scripts.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 3: THREAT INTELLIGENCE SEARCH ENGINE */}
+          {activeTab === 'threat-intel' && (
+            <div className="space-y-6 animate-fadeIn">
+              
+              {/* Intel Grounding Input Frame */}
+              <div className="bg-[#0e121a] border border-slate-800/80 p-5 rounded-xl space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-200">Adversary Threat intelligence</h3>
+                  <p className="text-xs text-slate-500">Run search queries across active zero-days, emerging CVE exploits, or threat actor groups (e.g. APT29)</p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-2.5 text-slate-500 w-4.5 h-4.5" />
+                    <input
+                      type="text"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                      placeholder="e.g. CVE-2024-3094 SSH backdoor or Lazarus Group TTPs"
+                      value={intelQuery}
+                      onChange={(e) => setIntelQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleThreatIntelSearch()}
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleThreatIntelSearch}
+                    disabled={intelSearching || !intelQuery.trim()}
+                    className={`px-6 py-2 rounded-lg text-xs font-bold tracking-wider transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
+                      intelSearching || !intelQuery.trim()
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-900'
+                        : 'bg-cyan-500 text-slate-950 hover:bg-cyan-400 font-extrabold shadow-[0_0_15px_rgba(6,182,212,0.15)]'
+                    }`}
+                  >
+                    {intelSearching ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                        <span>Searching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4 text-slate-950" />
+                        <span>Query Grounding Intel</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Popular Intel tags */}
+                <div className="flex items-center gap-2 flex-wrap text-2xs font-mono">
+                  <span className="text-slate-500">Emerging Alerts:</span>
+                  {['CVE-2024-21626', 'Log4Shell CVE-2021-44228', 'LockBit Ransomware', 'LNK files phishing'].map((tag, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setIntelQuery(tag);
+                      }}
+                      className="px-2 py-0.5 bg-slate-900/60 border border-slate-800/80 hover:border-cyan-500/50 rounded text-slate-300 cursor-pointer transition"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Grounded Search Output & Citations */}
+              <div className="bg-[#0e121a] border border-slate-800/80 p-5 rounded-xl min-h-[400px] flex flex-col justify-between gap-5">
+                <div className="space-y-4">
+                  <div className="border-b border-slate-850 pb-3 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold tracking-wide text-slate-200 font-mono">Grounded Intel File Output</h3>
+                      <p className="text-xs text-slate-500 font-mono">Cross-referenced against real-time search aggregates</p>
+                    </div>
+                    {intelSources.length > 0 && (
+                      <span className="text-[10px] bg-emerald-950/30 border border-emerald-900/50 text-emerald-400 font-bold font-mono px-2 py-1 rounded">
+                        Grounded - {intelSources.length} Reference Sources
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="overflow-y-auto">
+                    {intelSearching ? (
+                      <div className="py-20 flex flex-col items-center justify-center text-slate-500 gap-3">
+                        <Activity className="w-8 h-8 text-cyan-500 animate-pulse" />
+                        <span className="text-xs font-mono">Browsing threat registries & CVE libraries...</span>
+                      </div>
+                    ) : intelResult ? (
+                      <SecurityReportViewer text={intelResult} />
+                    ) : (
+                      <div className="py-20 flex flex-col items-center justify-center text-slate-500 gap-2 border border-dashed border-slate-900 rounded-lg">
+                        <Search className="w-8 h-8 text-slate-700" />
+                        <p className="text-xs font-mono text-center max-w-xs">
+                          Input a threat name or CVE. Co-pilot will scan real-time databases and return patching indicators.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Citations block */}
+                {intelSources.length > 0 && !intelSearching && (
+                  <div className="bg-slate-950/60 border border-slate-900 p-3.5 rounded-lg space-y-2">
+                    <span className="text-xs font-bold text-slate-400 font-mono flex items-center gap-1.5">
+                      <ExternalLink className="w-3.5 h-3.5 text-cyan-500" />
+                      Incident Grounding Attributions:
+                    </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-2xs font-mono">
+                      {intelSources.map((src, i) => (
+                        <a
+                          key={i}
+                          href={src.uri}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-between p-1.5 bg-slate-900/60 border border-slate-850 hover:border-cyan-500/30 rounded text-slate-300 hover:text-slate-100 transition group"
+                        >
+                          <span className="truncate max-w-[250px]">{src.title}</span>
+                          <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-cyan-400 shrink-0 ml-1" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 4: PLAYBOOK GENERATOR */}
+          {activeTab === 'playbook' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fadeIn">
+              
+              {/* Controls Selector Column (Left) */}
+              <div className="lg:col-span-4 flex flex-col gap-4">
+                <div className="bg-[#0e121a] border border-slate-800/80 p-5 rounded-xl space-y-5">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-200">Playbook Configuration</h3>
+                    <p className="text-xs text-slate-500">Align incident response commands directly with global framework parameters</p>
+                  </div>
+
+                  <div className="space-y-4 font-mono text-xs">
+                    {/* Threat Select option */}
+                    <div className="space-y-1.5">
+                      <label className="text-slate-400 font-semibold block">Incident Target Vector:</label>
+                      <select
+                        value={threatType}
+                        onChange={(e) => setThreatType(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800/80 p-2.5 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 cursor-pointer"
+                      >
+                        <option value="ransomware">Ransomware Infiltration</option>
+                        <option value="insider-threat">Malicious Insider Threat</option>
+                        <option value="phishing">Targeted CEO Phishing (BEC)</option>
+                        <option value="ddos">Distributed denial-of-service (DDoS)</option>
+                        <option value="api-compromise">Exposed Cloud API Secret</option>
+                      </select>
+                    </div>
+
+                    {/* Regulatory framework option */}
+                    <div className="space-y-1.5">
+                      <label className="text-slate-400 font-semibold block">Security Compliance Alignment:</label>
+                      <select
+                        value={complianceFramework}
+                        onChange={(e) => setComplianceFramework(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800/80 p-2.5 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 cursor-pointer"
+                      >
+                        <option value="nist">NIST SP 800-61 Rev. 2</option>
+                        <option value="gdpr">GDPR Breach Reporting Standard</option>
+                        <option value="hipaa">HIPAA Patient Security Protocols</option>
+                        <option value="soc2">SOC 2 Type II Auditing Trust Criteria</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handlePlaybookGeneration}
+                    disabled={generatingPlaybook}
+                    className={`w-full py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition flex items-center justify-center gap-2 cursor-pointer ${
+                      generatingPlaybook
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-900'
+                        : 'bg-cyan-500 text-slate-950 hover:bg-cyan-400 font-extrabold shadow-[0_0_15px_rgba(6,182,212,0.15)]'
+                    }`}
+                  >
+                    {generatingPlaybook ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                        <span>Compiling Controls...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileCode className="w-4 h-4 text-slate-950" />
+                        <span>Assemble Custom Playbook</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Playbook Display stage (Right) */}
+              <div className="lg:col-span-8 flex flex-col">
+                <div className="bg-[#0e121a] border border-slate-800/80 p-5 rounded-xl flex flex-col flex-1 gap-4 min-h-[500px]">
+                  
+                  <div className="border-b border-slate-850 pb-3 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold tracking-wide text-slate-200 font-mono">Incident Action Playbook Output</h3>
+                      <p className="text-xs text-slate-500 font-mono">Custom procedural document for security teams</p>
+                    </div>
+                    {generatedPlaybook && !generatingPlaybook && (
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedPlaybook);
+                          const event = new CustomEvent('toast', { detail: 'Playbook copied to clipboard!' });
+                          window.dispatchEvent(event);
+                        }}
+                        className="px-2.5 py-1 bg-slate-950 hover:bg-slate-900 text-slate-300 border border-slate-800 text-[10px] rounded cursor-pointer transition font-mono"
+                      >
+                        Copy Document
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto">
+                    {generatingPlaybook ? (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-3">
+                        <BookOpen className="w-8 h-8 text-cyan-500 animate-pulse" />
+                        <span className="text-xs font-mono">Aligning controls and mitigation milestones...</span>
+                      </div>
+                    ) : generatedPlaybook ? (
+                      <SecurityReportViewer text={generatedPlaybook} />
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-2 border border-dashed border-slate-900 rounded-lg p-8">
+                        <FileText className="w-8 h-8 text-slate-700" />
+                        <p className="text-xs font-mono text-center max-w-sm">
+                          Select the target breach class and regulatory controls. Co-pilot will map out a production-ready blueprint.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 5: VULNERABILITY SCANNER */}
+          {activeTab === 'scanner' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fadeIn">
+              
+              {/* Scan target details & vulnerability findings panel */}
+              <div className="lg:col-span-5 flex flex-col gap-4">
+                
+                {/* Controller console */}
+                <div className="bg-[#0e121a] border border-slate-800/80 p-5 rounded-xl space-y-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-200">Reconnaissance Footprint Module</h3>
+                    <p className="text-xs text-slate-500">Run a safe local scanning simulation against host addresses</p>
+                  </div>
+
+                  <div className="space-y-3 font-mono text-xs">
+                    <div className="space-y-1">
+                      <label className="text-slate-400 font-semibold block">Target Node IP / Domain:</label>
+                      <input
+                        type="text"
+                        className="w-full bg-slate-950 border border-slate-800/80 p-2.5 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                        value={scanTarget}
+                        onChange={(e) => setScanTarget(e.target.value)}
+                        placeholder="e.g. 192.168.10.45"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={startNetworkScan}
+                    disabled={isScanning || !scanTarget.trim()}
+                    className={`w-full py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition flex items-center justify-center gap-2 cursor-pointer ${
+                      isScanning || !scanTarget.trim()
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-900'
+                        : 'bg-gradient-to-r from-emerald-600 to-green-700 text-slate-950 hover:from-emerald-500 hover:to-green-600 font-extrabold shadow-[0_0_15px_rgba(16,185,129,0.15)]'
+                    }`}
+                  >
+                    {isScanning ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                        <span>Probing Network Matrix...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 text-slate-950" />
+                        <span>Run Simulation Scan</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Discovered Vulnerabilities checklist */}
+                <div className="bg-[#0e121a] border border-slate-800/80 p-4 rounded-xl flex-1 space-y-4 min-h-[300px]">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-200">Footprint Detections</h3>
+                    <p className="text-xs text-slate-500 font-mono">Found vulnerability endpoints from scans</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {detectedVulnerabilities.length > 0 ? (
+                      detectedVulnerabilities.map((vuln, i) => (
+                        <div key={i} className="bg-slate-950 border border-slate-850 p-3 rounded-lg space-y-2 flex flex-col justify-between">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-400 font-bold px-2 py-0.5 rounded font-mono">
+                                Port: {vuln.port}
+                              </span>
+                              <h4 className="text-xs font-bold text-slate-250 mt-1 font-mono">{vuln.name}</h4>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                              vuln.severity === 'High' 
+                                ? 'bg-amber-950/40 text-amber-400 border border-amber-900/50' 
+                                : vuln.severity === 'Medium' 
+                                ? 'bg-orange-950/40 text-orange-400 border border-orange-900/50'
+                                : 'bg-blue-950/40 text-blue-400 border border-blue-900/50'
+                            }`}>
+                              {vuln.severity}
+                            </span>
+                          </div>
+
+                          <p className="text-2xs text-slate-500 font-mono leading-relaxed">{vuln.details}</p>
+
+                          <button
+                            onClick={() => handleAnalyzeScanResult(vuln)}
+                            className="w-full mt-2 py-1.5 bg-cyan-950/50 hover:bg-cyan-950 border border-cyan-900 text-[10px] font-mono text-cyan-400 hover:text-cyan-300 rounded transition cursor-pointer flex items-center justify-center gap-1"
+                          >
+                            <Terminal className="w-3.5 h-3.5" />
+                            <span>Export and Analyze remediation</span>
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="h-48 border border-dashed border-slate-900 rounded-lg flex flex-col items-center justify-center text-slate-500 text-center p-4">
+                        <Sliders className="w-6 h-6 text-slate-700 mb-1" />
+                        <p className="text-xs font-mono">No vulnerabilities extracted yet. Click "Run Simulation Scan" above.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Shell output terminal console logs (Right) */}
+              <div className="lg:col-span-7 flex flex-col">
+                <div className="bg-[#04060a] border border-slate-800/80 p-4 rounded-xl flex flex-col flex-1 font-mono text-xs min-h-[500px]">
+                  
+                  <div className="border-b border-slate-900 pb-3 mb-3 flex items-center justify-between text-slate-400">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping"></span>
+                      <span>Soc-Recon Console Screen Output</span>
+                    </span>
+                    <span className="text-2xs text-slate-600">IP-STAGED</span>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto space-y-2 text-slate-300">
+                    {scanOutput.length > 0 ? (
+                      scanOutput.map((out, i) => {
+                        const isAlert = out.includes('[!]');
+                        const isHeader = out.includes('[+]');
+                        return (
+                          <div 
+                            key={i} 
+                            className={`p-1 rounded ${
+                              isAlert 
+                                ? 'text-amber-400 bg-amber-950/10' 
+                                : isHeader 
+                                ? 'text-cyan-400' 
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            {out}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-2">
+                        <Terminal className="w-8 h-8 text-slate-800" />
+                        <span>Ready to capture simulation logs...</span>
+                      </div>
+                    )}
+                    {isScanning && (
+                      <div className="text-cyan-500 animate-pulse flex items-center gap-1.5 font-bold">
+                        <span>$</span>
+                        <span className="animate-bounce">_</span>
+                      </div>
+                    )}
+                    <div ref={scanTerminalEndRef} />
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 6: SECURITY ASSISTANT CHAT */}
+          {activeTab === 'chat' && (
+            <div className="bg-[#0e121a] border border-slate-800/80 p-4 rounded-xl flex-1 flex flex-col min-h-[550px] justify-between gap-4 animate-fadeIn">
+              
+              {/* Dynamic Chat Header */}
+              <div className="border-b border-slate-850 pb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                    <Database className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <span>Active SOC Co-Pilot Assistant</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 font-mono">Incident planning, defense code auditing, and firewall scripting</p>
+                </div>
+              </div>
+
+              {/* Chat Message feed area */}
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1 max-h-[420px]">
+                {chatMessages.map((msg, i) => (
+                  <div 
+                    key={i} 
+                    className={`flex gap-3 max-w-[85%] ${
+                      msg.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-lg font-mono text-2xs uppercase tracking-widest shrink-0 select-none ${
+                      msg.role === 'user' ? 'bg-cyan-950/40 text-cyan-400 border border-cyan-900/60' : 'bg-slate-900 border border-slate-800 text-slate-400'
+                    }`}>
+                      {msg.role === 'user' ? 'USER' : 'CO-PL'}
+                    </div>
+
+                    <div className={`p-3.5 rounded-xl text-sm leading-relaxed ${
+                      msg.role === 'user' 
+                        ? 'bg-cyan-950/20 border border-cyan-900/30 text-slate-200' 
+                        : 'bg-slate-950/80 border border-slate-900 text-slate-300'
+                    }`}>
+                      {msg.role === 'assistant' ? (
+                        <SecurityReportViewer text={msg.text} />
+                      ) : (
+                        <span className="font-mono text-xs whitespace-pre-wrap">{msg.text}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                
+                {assistantLoading && (
+                  <div className="flex gap-3 max-w-[80%] mr-auto items-center">
+                    <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 text-2xs font-mono select-none uppercase tracking-widest animate-pulse">
+                      CO-PL
+                    </div>
+                    <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-900 p-3.5 rounded-xl">
+                      <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    </div>
+                  </div>
+                )}
+                
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Chat Input form footer */}
+              <div className="flex gap-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800 focus-within:border-cyan-500/80 transition-all">
+                <input
+                  type="text"
+                  className="flex-1 bg-transparent border-none text-xs text-slate-200 focus:outline-none focus:ring-0 placeholder-slate-600 font-mono"
+                  placeholder="Ask for an SSH security policy script, ransomware isolation plan..."
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!chatInput.trim() || assistantLoading}
+                  className={`p-2 rounded-lg transition shrink-0 cursor-pointer ${
+                    !chatInput.trim() || assistantLoading
+                      ? 'bg-slate-900 text-slate-600'
+                      : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
+                  }`}
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+
+            </div>
+          )}
+
+        </main>
+      </div>
+
+      {/* Global Toast Controller */}
+      <ToastNotification />
+
+    </div>
+  );
+}
+
+function ToastNotification() {
+  const [toastMessage, setToastMessage] = useState('');
+
+  useEffect(() => {
+    const handleToast = (e) => {
+      setToastMessage(e.detail);
+      setTimeout(() => {
+        setToastMessage('');
+      }, 3500);
+    };
+
+    window.addEventListener('toast', handleToast);
+    return () => window.removeEventListener('toast', handleToast);
+  }, []);
+
+  if (!toastMessage) return null;
+
+  return (
+    <div className="fixed bottom-6 right-6 bg-slate-950/90 border border-cyan-500/40 text-cyan-400 px-4 py-2.5 rounded-lg shadow-2xl z-50 font-mono text-xs flex items-center gap-2 animate-fadeIn">
+      <CheckCircle className="w-4 h-4 text-cyan-400 shrink-0" />
+      <span>{toastMessage}</span>
+    </div>
+  );
+}
